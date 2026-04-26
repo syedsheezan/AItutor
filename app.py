@@ -43,13 +43,32 @@ html, body, [class*="css"] {
     color: #1A1A2E !important;
 }
 
+/* Header & Menu Visibility */
+header[data-testid="stHeader"] {
+    background-color: rgba(0,0,0,0) !important;
+}
+header[data-testid="stHeader"] svg {
+    fill: #4F46E5 !important;
+}
+
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #FFFFFF 0%, #EEF0FB 100%);
+    background: #FFFFFF !important;
     border-right: 1px solid rgba(79,70,229,0.3);
 }
 [data-testid="stSidebar"] * {
     color: #1A1A2E !important;
+}
+
+/* Mobile Sidebar Button */
+[data-testid="stSidebarCollapsedControl"] {
+    background-color: #4F46E5 !important;
+    color: white !important;
+    border-radius: 0 10px 10px 0 !important;
+    opacity: 0.9;
+}
+[data-testid="stSidebarCollapsedControl"] svg {
+    fill: white !important;
 }
 
 /* Chat bubbles */
