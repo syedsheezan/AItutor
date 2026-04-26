@@ -1,0 +1,43 @@
+# AI Tutor Requirements (Pinned Versions)
+# ─────────────────────────────────────
+
+# Core LangChain
+langchain==0.3.25
+langchain-core==0.3.58
+langchain-community==0.3.23
+langchain-text-splitters==0.3.8
+langchain-huggingface==0.1.2
+
+# LLM & Embedding Models
+huggingface_hub==0.36.2
+transformers==4.48.3
+tokenizers==0.21.4
+sentence-transformers==5.4.1
+
+# Deep Learning Frameworks
+torch==2.11.0
+torchvision==0.26.0
+
+# Vector Database
+faiss-cpu==1.13.2
+
+# Document Loading & Parsing
+PyMuPDF==1.27.2.3
+unstructured==0.22.23
+pypdf==6.10.2
+
+# Search & Tools
+duckduckgo-search==8.1.1
+wikipedia==1.4.0
+numexpr==2.14.1
+
+# Networking & Utilities
+requests==2.33.1
+httpx==0.28.1
+python-dotenv==1.2.2
+
+# Web Framework
+streamlit==1.56.0
+altair==6.1.0
+pandas==3.0.2
+numpy==2.4.4

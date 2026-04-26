@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Streamlit
+.streamlit/
+
+# Local data & logs
+*.log
+data/
+db/
+memory/
+*.pdf
+*.txt
+!requirements.txt
+
+# OS
+.DS_Store
+Thumbs.db
