@@ -3,6 +3,7 @@ import streamlit as st
 import os
 import json
 import time
+import uuid
 from pathlib import Path
 
 st.set_page_config(
@@ -235,6 +236,27 @@ from core.chains         import build_rag_chain, build_agent_chain
 from core.memory         import load_memory, save_memory, clear_memory
 from core.document_loader import load_uploaded_file
 
+# ─── Device ID Handshake ───────────────────────────────────────────────────
+# This ensures every unique device/browser has its own persistent identity
+dev_id_from_url = st.query_params.get("dev_id")
+
+if not dev_id_from_url:
+    st.components.v1.html("""
+        <script>
+        const key = 'ai_tutor_device_id';
+        let devId = localStorage.getItem(key);
+        if (!devId) {
+            devId = 'device_' + Math.random().toString(36).substring(2, 11);
+            localStorage.setItem(key, devId);
+        }
+        const url = new URL(window.parent.location.href);
+        if (url.searchParams.get('dev_id') !== devId) {
+            url.searchParams.set('dev_id', devId);
+            window.parent.location.href = url.href;
+        }
+        </script>
+    """, height=0)
+
 # ─── Session State Init ──────────────────────────────────────────────────────
 if "chat_history"   not in st.session_state: st.session_state.chat_history   = []
 if "vectorstore"    not in st.session_state: st.session_state.vectorstore    = None
@@ -242,7 +264,17 @@ if "doc_loaded"     not in st.session_state: st.session_state.doc_loaded     = F
 if "doc_name"       not in st.session_state: st.session_state.doc_name       = ""
 if "student_name"   not in st.session_state: st.session_state.student_name   = ""
 if "mode"           not in st.session_state: st.session_state.mode           = "agent"
-if "session_id"     not in st.session_state: st.session_state.session_id     = "student_default"
+
+# session_id logic: Use name if provided, otherwise fallback to device ID
+if "session_id" not in st.session_state:
+    if st.session_state.student_name:
+        st.session_state.session_id = st.session_state.student_name
+    elif dev_id_from_url:
+        st.session_state.session_id = dev_id_from_url
+    else:
+        # Use a unique random ID for this specific tab until the device ID is ready
+        # This prevents 'guest' sharing between different devices/tabs.
+        st.session_state.session_id = f"new_session_{uuid.uuid4().hex[:8]}"
 
 if "memory_loaded" not in st.session_state:
     st.session_state.chat_history = load_memory(st.session_state.session_id)
@@ -254,7 +286,18 @@ with st.sidebar:
     st.markdown("---")
 
     name = st.text_input("👤 Your Name", value=st.session_state.student_name, placeholder="Enter your name...")
-    if name: st.session_state.student_name = name
+    if name and name != st.session_state.student_name:
+        st.session_state.student_name = name
+        st.session_state.session_id = name
+        st.session_state.chat_history = load_memory(name)
+        st.rerun()
+
+    # Show current device/session identity for clarity
+    current_id = st.session_state.session_id
+    if current_id.startswith("device_"):
+        st.caption(f"📍 Device ID: `{current_id.replace('device_', '')}`")
+    else:
+        st.caption(f"👤 Logged in as: `{current_id}`")
 
     st.markdown("---")
     st.markdown("### 📂 Upload Study Material")
