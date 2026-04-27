@@ -237,25 +237,29 @@ from core.memory         import load_memory, save_memory, clear_memory
 from core.document_loader import load_uploaded_file
 
 # ─── Device ID Handshake ───────────────────────────────────────────────────
-# This ensures every unique device/browser has its own persistent identity
-dev_id_from_url = st.query_params.get("dev_id")
+# ─── Device ID Handshake ───────────────────────────────────────────────────
+# We use JS to ensure every unique browser has a persistent ID in localStorage.
+# We prioritize localStorage over the URL to prevent session sharing via copy-paste.
+st.components.v1.html("""
+    <script>
+    const key = 'ai_tutor_device_id';
+    let devId = localStorage.getItem(key);
+    if (!devId) {
+        devId = 'device_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem(key, devId);
+    }
+    const url = new URL(window.parent.location.href);
+    if (url.searchParams.get('dev_id') !== devId) {
+        url.searchParams.set('dev_id', devId);
+        window.parent.location.href = url.href;
+    }
+    </script>
+""", height=0)
 
+dev_id_from_url = st.query_params.get("dev_id")
 if not dev_id_from_url:
-    st.components.v1.html("""
-        <script>
-        const key = 'ai_tutor_device_id';
-        let devId = localStorage.getItem(key);
-        if (!devId) {
-            devId = 'device_' + Math.random().toString(36).substring(2, 11);
-            localStorage.setItem(key, devId);
-        }
-        const url = new URL(window.parent.location.href);
-        if (url.searchParams.get('dev_id') !== devId) {
-            url.searchParams.set('dev_id', devId);
-            window.parent.location.href = url.href;
-        }
-        </script>
-    """, height=0)
+    st.info("🔄 Identifying your device... Please wait.")
+    st.stop()
 
 # ─── Session State Init ──────────────────────────────────────────────────────
 if "chat_history"   not in st.session_state: st.session_state.chat_history   = []
