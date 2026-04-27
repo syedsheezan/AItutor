@@ -12,6 +12,7 @@ The chains now support streaming and provide status updates for a better UI expe
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from typing import Any, Dict, List, Tuple, Iterator
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -139,60 +140,76 @@ def _needs_math(question: str) -> bool:
     return has_operator or has_trigger
 
 
-def _deep_search(question: str) -> str:
-    """Unified search that tries DuckDuckGo and Wikipedia with multiple queries."""
-    import wikipedia as wp
-    search_data = ""
+def _get_search_queries(question: str, llm) -> List[str]:
+    """Use the LLM to generate 3 optimized search queries for the latest info."""
+    prompt = f"""Today's date is Monday, 27 April 2026.
+Given the student question below, generate 3 professional, optimized search engine queries to find the most accurate and up-to-date information. 
+Focus on 2026 data. Return ONLY the 3 queries, one per line, no numbering, no explanations.
+
+Question: {question}"""
     
-    # 1. Broaden keywords for better search
-    q_lower = question.lower()
-    event_query = None
-    if "misfits" in q_lower:
-        event_query = "Misfits Boxing X Series 2026 results"
-    elif "ufc" in q_lower:
-        event_query = "UFC 2026 results"
-    
-    queries = [question.lower().replace("tell me", "").strip()]
-    if event_query:
-        queries.append(event_query)
-    
-    # 2. DuckDuckGo strategy
     try:
+        res = llm.invoke(prompt)
+        content = res.content if hasattr(res, 'content') else str(res)
+        # Handle potential junk lines
+        queries = [q.strip() for q in content.split("\n") if q.strip() and not q.startswith("Here are")]
+        return queries[:3]
+    except Exception:
+        return [question]
+
+
+def _smart_search(question: str, llm) -> Iterator[dict]:
+    """Cascading search: LLM Expansion -> Wikipedia -> Serper (Google) -> DuckDuckGo."""
+    
+    # 1. Reformulate
+    yield {"status": "🧠 Optimizing search queries for 2026..."}
+    queries = _get_search_queries(question, llm)
+    
+    context = ""
+    
+    # 2. Wikipedia (Quick check for background)
+    yield {"status": "📚 Consulting Wikipedia..."}
+    wiki_data = _run_wikipedia(question)
+    if wiki_data:
+        context += wiki_data
+    
+    # 3. Google/Serper (Primary for current info)
+    serper_key = os.getenv("SERPER_API_KEY")
+    if serper_key:
+        yield {"status": "🌐 Searching Google (Serper) for latest results..."}
+        import requests
+        headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
+        for q in queries:
+            try:
+                payload = {"q": q, "num": 4}
+                resp = requests.post("https://google.serper.dev/search", headers=headers, json=payload, timeout=8)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    organic = data.get("organic", [])
+                    if organic:
+                        context += f"--- Google Search ({q}) ---\n"
+                        for res in organic:
+                            context += f"- {res.get('title')}: {res.get('snippet')}\n"
+                        context += "\n"
+            except Exception:
+                continue
+            if len(context) > 4000: break
+
+    # 4. DuckDuckGo (Fallback or supplementary)
+    if len(context) < 1500:
+        yield {"status": "🦆 Digging deeper with DuckDuckGo..."}
         from langchain_community.tools import DuckDuckGoSearchRun
         ddg = DuckDuckGoSearchRun()
-        for dq in queries:
-            res = ddg.run(dq)
-            if "No good DuckDuckGo Search Result was found" not in res:
-                search_data += f"--- Web Search ({dq}) ---\n{res}\n\n"
-            if len(search_data) > 1000: break
-    except Exception: pass
-
-    # 3. Wikipedia Strategy (More aggressive)
-    try:
-        # Search for page titles
-        search_titles = wp.search(question, results=3)
-        if event_query:
-            search_titles.extend(wp.search(event_query, results=2))
-            
-        for title in set(search_titles):
+        for q in queries:
             try:
-                page = wp.page(title, auto_suggest=False)
-                search_data += f"--- Wikipedia: {title} ---\n{page.summary}\n"
-                if "boxing" in q_lower or "result" in q_lower:
-                    search_data += page.content[:1500] + "\n"
-            except Exception: continue
-            if len(search_data) > 5000: break
-    except Exception: pass
+                res = ddg.run(q)
+                if res and "No good DuckDuckGo Search Result" not in res:
+                    context += f"--- Web Result ({q}) ---\n{res}\n\n"
+            except Exception:
+                continue
+            if len(context) > 4000: break
 
-    return search_data if search_data else "I searched extensively but found no results. The event might be very recent."
-
-
-def _run_search(question: str) -> str:
-    return _deep_search(question)
-
-
-def _run_wikipedia(question: str) -> str:
-    return _deep_search(question)
+    yield {"search_context": context}
 
 
 def _run_math(question: str, llm) -> str | None:
@@ -205,8 +222,12 @@ def _run_math(question: str, llm) -> str | None:
 
 def _run_wikipedia(question: str) -> str:
     try:
+        from langchain_community.tools import WikipediaQueryRun
+        from langchain_community.utilities import WikipediaAPIWrapper
         wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
         results = wiki.run(question)
+        if "No good Wikipedia Search Result was found" in results:
+            return ""
         return f"--- Wikipedia Results ---\n{results}\n--- End of Wikipedia Results ---\n\n"
     except Exception:
         return ""
@@ -226,7 +247,7 @@ class DirectChain:
 
         # 1. Math check
         if _needs_math(question):
-            yield {"status": "🧮 Calculating math..."}
+            yield {"status": "Checking"}
             math_ans = _run_math(question, self.llm)
             if math_ans:
                 yield {"chunk": math_ans}
@@ -235,13 +256,11 @@ class DirectChain:
         # 2. Web search check
         search_ctx = ""
         if _needs_search(question):
-            yield {"status": "🌐 Searching the web for latest info..."}
-            search_ctx = _run_search(question)
-            
-            # If search_ctx is still very short or empty, try a broader term
-            if len(search_ctx) < 50:
-                 yield {"status": "📚 Checking Wikipedia for additional context..."}
-                 search_ctx += _run_wikipedia(question)
+            for event in _smart_search(question, self.llm):
+                if "status" in event:
+                    yield {"status": event["status"]}
+                if "search_context" in event:
+                    search_ctx = event["search_context"]
 
         # 3. Final generation
         now = _dt.datetime.now().strftime("%A, %d %B %Y")
