@@ -238,28 +238,24 @@ from core.document_loader import load_uploaded_file
 
 # ─── Device ID Handshake ───────────────────────────────────────────────────
 # ─── Device ID Handshake ───────────────────────────────────────────────────
-# We use JS to ensure every unique browser has a persistent ID in localStorage.
-# We prioritize localStorage over the URL to prevent session sharing via copy-paste.
-st.components.v1.html("""
+# We use a non-blocking handshake. Each tab starts unique, then links to the device ID.
+dev_id_from_url = st.query_params.get("dev_id")
+
+st.components.v1.html(f"""
     <script>
     const key = 'ai_tutor_device_id';
     let devId = localStorage.getItem(key);
-    if (!devId) {
+    if (!devId) {{
         devId = 'device_' + Math.random().toString(36).substring(2, 11);
         localStorage.setItem(key, devId);
-    }
+    }}
     const url = new URL(window.parent.location.href);
-    if (url.searchParams.get('dev_id') !== devId) {
+    if (url.searchParams.get('dev_id') !== devId) {{
         url.searchParams.set('dev_id', devId);
         window.parent.location.href = url.href;
-    }
+    }}
     </script>
 """, height=0)
-
-dev_id_from_url = st.query_params.get("dev_id")
-if not dev_id_from_url:
-    st.info("🔄 Identifying your device... Please wait.")
-    st.stop()
 
 # ─── Session State Init ──────────────────────────────────────────────────────
 if "chat_history"   not in st.session_state: st.session_state.chat_history   = []
