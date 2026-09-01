@@ -6,6 +6,15 @@ import time
 import uuid
 from pathlib import Path
 
+# Automatically sync Streamlit Cloud secrets to os.environ
+try:
+    if hasattr(st, "secrets"):
+        for k, v in st.secrets.items():
+            if isinstance(v, str) and k not in os.environ:
+                os.environ[k] = v
+except Exception:
+    pass
+
 st.set_page_config(
     page_title="AI Tutor 🎓",
     page_icon="🎓",
@@ -363,8 +372,23 @@ with st.sidebar:
     </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
+    st.markdown("### 🔍 Search Engine")
+    current_serper = os.getenv("SERPER_API_KEY") or (st.secrets.get("SERPER_API_KEY") if hasattr(st, "secrets") and "SERPER_API_KEY" in st.secrets else "") or st.session_state.get("serper_api_key", "")
+    if current_serper:
+        st.markdown('<span style="color:#10B981;font-weight:600;font-size:13px;">🟢 Google Search (Serper) Active</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span style="color:#F59E0B;font-weight:600;font-size:13px;">🟡 DuckDuckGo Search (Default)</span>', unsafe_allow_html=True)
+        with st.expander("🔑 Connect Google (Serper)"):
+            sk = st.text_input("Serper API Key", type="password", key="serper_input", help="Get a free key from https://serper.dev")
+            if sk and sk.strip() != st.session_state.get("serper_api_key", ""):
+                st.session_state["serper_api_key"] = sk.strip()
+                os.environ["SERPER_API_KEY"] = sk.strip()
+                st.success("Serper Key configured!")
+                st.rerun()
+
+    st.markdown("---")
     st.markdown("""<div style="font-size:11px;color:#8888AA;text-align:center;">
-        🤖 Powered by HuggingFace LLM<br/>LangChain 0.3 · FAISS · DuckDuckGo
+        🤖 Powered by HuggingFace LLM<br/>LangChain 0.3 · FAISS · Google/DuckDuckGo
     </div>""", unsafe_allow_html=True)
 
 # ─── Main Area ────────────────────────────────────────────────────────────────

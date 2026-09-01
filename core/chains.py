@@ -174,11 +174,21 @@ def _smart_search(question: str, llm) -> Iterator[dict]:
         context += wiki_data
     
     # 3. Google/Serper (Primary for current info)
-    serper_key = os.getenv("SERPER_API_KEY")
+    serper_key = os.getenv("SERPER_API_KEY", "")
+    if not serper_key:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and "SERPER_API_KEY" in st.secrets:
+                serper_key = str(st.secrets["SERPER_API_KEY"])
+            elif hasattr(st, "session_state") and "serper_api_key" in st.session_state:
+                serper_key = str(st.session_state.get("serper_api_key", ""))
+        except Exception:
+            pass
+
     if serper_key:
         yield {"status": "🌐 Searching Google (Serper) for latest results..."}
         import requests
-        headers = {"X-API-KEY": serper_key, "Content-Type": "application/json"}
+        headers = {"X-API-KEY": serper_key.strip(), "Content-Type": "application/json"}
         for q in queries:
             try:
                 payload = {"q": q, "num": 4}
@@ -191,7 +201,10 @@ def _smart_search(question: str, llm) -> Iterator[dict]:
                         for res in organic:
                             context += f"- {res.get('title')}: {res.get('snippet')}\n"
                         context += "\n"
-            except Exception:
+                else:
+                    print(f"[Serper Search] HTTP {resp.status_code}: {resp.text}")
+            except Exception as e:
+                print(f"[Serper Search] Request error: {e}")
                 continue
             if len(context) > 4000: break
 

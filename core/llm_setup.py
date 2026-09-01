@@ -24,9 +24,21 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 load_dotenv()
 
 # ── env vars ──────────────────────────────────────────────────────────────────
-HF_TOKEN       = os.getenv("HUGGINGFACEHUB_API_TOKEN", "")
-PRIMARY_MODEL  = os.getenv("PRIMARY_MODEL",  "Qwen/Qwen2.5-72B-Instruct")
-FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+def _get_env_or_secret(key: str, default: str = "") -> str:
+    val = os.getenv(key)
+    if val:
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+HF_TOKEN       = _get_env_or_secret("HUGGINGFACEHUB_API_TOKEN", "") or _get_env_or_secret("HF_TOKEN", "")
+PRIMARY_MODEL  = _get_env_or_secret("PRIMARY_MODEL",  "Qwen/Qwen2.5-72B-Instruct")
+FALLBACK_MODEL = _get_env_or_secret("FALLBACK_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 # System prompt injected into every call
 SYSTEM_PROMPT = """You are an enthusiastic, warm, and patient AI Tutor for school students.
